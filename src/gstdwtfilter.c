@@ -2,7 +2,7 @@
  * GStreamer
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2015 martin <<user@hostname.org>>
+ * Copyright (C) 2015 Martin Petrov Vachovski <<user@hostname.org>>
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -61,9 +61,9 @@
 #endif
 
 #include <gst/gst.h>
-#include <stdlib.h>
+
 #include <string.h>
-#include <time.h>
+#include <gsl/gsl_wavelet.h>
 
 #include "gstdwtfilter.h"
 
@@ -109,15 +109,10 @@ static void gst_dwt_filter_get_property (GObject * object, guint prop_id,
 
 static gboolean gst_dwt_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event);
 static GstFlowReturn gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf);
-static gboolean gst_dwt_filter_query (GstPad *pad, GstObject *parent, GstQuery  *query);
-
-
+static gboolean gst_dwt_filter_query (GstPad *pad, GstObject *parent, GstQuery *query);
 
 static void guint8_to_gdouble(guint8* src, gdouble *dst, gsize sz);
 static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz);
-
-int width, height;
-double *pDWTBuffer;
 
 /* GObject vmethod implementations */
 
@@ -140,9 +135,9 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 
 	gst_element_class_set_details_simple(gstelement_class,
 			"DwtFilter",
-			"DWT edge detection",
-			"DWT edge detection",
-			"martin <<user@hostname.org>>");
+			"FIXME:Generic",
+			"FIXME:Generic Template Element",
+			"Martin Petrov Vachovski <<user@hostname.org>>");
 
 	gst_element_class_add_pad_template (gstelement_class,
 			gst_static_pad_template_get (&src_factory));
@@ -172,10 +167,12 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 
 	filter->silent = FALSE;
 
+	filter->pClock = gst_system_clock_obtain();
+
 	filter->w = gsl_wavelet_alloc (gsl_wavelet_haar, 2);
 
 	gst_pad_set_query_function (filter->srcpad, gst_dwt_filter_query);
-	gst_pad_set_query_function (filter->sinkpad, gst_dwt_filter_query);
+//	gst_pad_set_query_function (filter->sinkpad, gst_dwt_filter_query);
 
 }
 
@@ -238,16 +235,16 @@ gst_dwt_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 			structure = gst_caps_get_structure (caps, i);
 			if(structure)
 			{
-				gst_structure_get_int(structure, "width", &width);
-				gst_structure_get_int(structure, "height", &height);
+				gst_structure_get_int(structure, "width", &filter->width);
+				gst_structure_get_int(structure, "height", &filter->height);
 				format = gst_structure_get_string(structure, "format");
-				g_print("width = %d height = %d format = %s\n", width, height, format);
+				g_print("width = %d height = %d format = %s\n", filter->width, filter->height, format);
 				//pAccum = malloc(4 * width * height * sizeof(long int));
 				//memset(pAccum, 0, 4 * width * height * sizeof(long int));
-				pDWTBuffer = (double*) malloc(width * height * sizeof(double));
-				memset(pDWTBuffer, 0, width * height * sizeof(double));
-				
-				filter->work = gsl_wavelet_workspace_alloc (width * height * sizeof(double));
+				filter->pDWTBuffer = (double*) malloc(filter->width * filter->height * sizeof(double));
+				memset(filter->pDWTBuffer, 0, filter->width * filter->height * sizeof(double));
+
+				filter->work = gsl_wavelet_workspace_alloc (filter->width * filter->height * sizeof(double));
 			}
 			else
 			{
@@ -275,32 +272,43 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	GstDwtFilter *filter;
 	GstMapInfo info;
 	int res, i;
-	static nFrameNumber = 0;
+	double data[] = {1, 2, 3, 4, 5, 6, 7, 8};
+	GstClockTime start_timestamp, end_timestamp, data_timestamp;
 
 	filter = GST_DWTFILTER (parent);
 
 //	if (filter->silent == FALSE)
 //		g_print ("I'm plugged, therefore I'm in.\n");
 
-	gst_buffer_map (buf, &info, GST_MAP_WRITE);
-	guint8_to_gdouble(info.data, pDWTBuffer, height * width);
+	data_timestamp = GST_BUFFER_TIMESTAMP (buf);
+	start_timestamp = gst_clock_get_time(filter->pClock);
 
-	for(i = 0; i < height; i++)
+	gst_buffer_map (buf, &info, GST_MAP_WRITE);
+	guint8_to_gdouble(info.data, filter->pDWTBuffer, filter->height * filter->width);
+
+	for(i = 0; i < 2; i++)
 	{
-		res = gsl_wavelet_transform_forward(filter->w, pDWTBuffer + (i * width),
-			1, width, filter->work);
+//		g_print ("Calling gsl_wavelet_transform_forward()...\n");
+		res = gsl_wavelet_transform_forward(filter->w, filter->pDWTBuffer + filter->height * i,
+			1, filter->width, filter->work);
+
+		memset(filter->pDWTBuffer + filter->height * i,
+			0, filter->width * sizeof(gdouble) / 5);
+
+		res = gsl_wavelet_transform_inverse(filter->w, filter->pDWTBuffer + filter->height * i,
+			1, filter->width, filter->work);
+
+//		res = gsl_wavelet_transform_forward(filter->w, data,
+//			1, 8, filter->work);
 	}
 
-//	res = gsl_wavelet2d_transform_forward(filter->w, pDWTBuffer,
-//		width, width, height, filter->work);
-	
-//	res = gsl_wavelet2d_transform_inverse(filter->w, pDWTBuffer,
-//		width, width, height, filter->work);
-
-	gdouble_to_guint8(pDWTBuffer, info.data, height * width);
+	gdouble_to_guint8(filter->pDWTBuffer, info.data, filter->height * filter->width);
 	gst_buffer_unmap (buf, &info);
 
-	g_print("Buffer number: %d time %ld: \n", nFrameNumber++, time(NULL));
+	end_timestamp = gst_clock_get_time(filter->pClock);
+
+
+	g_print ("start = %ld end = %ld ts = %ld\n", start_timestamp, end_timestamp, data_timestamp);
 
 	/* just push out the incoming buffer without touching it */
 	return gst_pad_push (filter->srcpad, buf);
@@ -325,29 +333,6 @@ dwtfilter_init (GstPlugin * dwtfilter)
 			GST_TYPE_DWTFILTER);
 }
 
-static void guint8_to_gdouble(guint8* src, gdouble *dst, gsize sz)
-{
-	int i;
-
-	for(i = 0; i < sz; i++)
-	{
-		dst[i] = src[i];
-	}
-}
-
-static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz)
-{
-	int i;
-
-	for(i = 0; i < sz; i++)
-	{
-		dst[i] = src[i];
-	}
-}
-
-//gst_pad_set_query_function (filter->srcpad,
-//    gst_my_filter_src_query);
-
 static gboolean
 gst_dwt_filter_query (GstPad    *pad,
 		GstObject *parent,
@@ -371,7 +356,8 @@ gst_dwt_filter_query (GstPad    *pad,
 //		 break;
 	case GST_QUERY_LATENCY:
 		g_print("GST_QUERY_LATENCY arrived\n");
-		ret = gst_pad_query_default (pad, parent, query);
+		gst_query_set_latency (query, TRUE, 10000000000, 10000000000);
+//		ret = gst_pad_query_default (pad, parent, query);
 		break;
 
 	default:
@@ -380,6 +366,26 @@ gst_dwt_filter_query (GstPad    *pad,
 		break;
 	}
 	return ret;
+}
+
+static void guint8_to_gdouble(guint8* src, gdouble *dst, gsize sz)
+{
+	int i;
+
+	for(i = 0; i < sz; i++)
+	{
+		dst[i] = src[i];
+	}
+}
+
+static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz)
+{
+	int i;
+
+	for(i = 0; i < sz; i++)
+	{
+		dst[i] = src[i];
+	}
 }
 
 /* PACKAGE: this is usually set by autotools depending on some _INIT macro
@@ -396,14 +402,13 @@ gst_dwt_filter_query (GstPad    *pad,
  * exchange the string 'Template dwtfilter' with your dwtfilter description
  */
 GST_PLUGIN_DEFINE (
-		GST_VERSION_MAJOR,
-		GST_VERSION_MINOR,
-		dwtfilter,
-		"Template dwtfilter",
-		dwtfilter_init,
-		VERSION,
-		"LGPL",
-		"GStreamer",
-		"http://gstreamer.net/"
+    GST_VERSION_MAJOR,
+    GST_VERSION_MINOR,
+    dwtfilter,
+    "Template dwtfilter",
+    dwtfilter_init,
+    VERSION,
+    "LGPL",
+    "GStreamer",
+    "http://gstreamer.net/"
 )
-

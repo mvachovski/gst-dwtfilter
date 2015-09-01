@@ -2,7 +2,7 @@
  * GStreamer
  * Copyright (C) 2005 Thomas Vander Stichele <thomas@apestaart.org>
  * Copyright (C) 2005 Ronald S. Bultje <rbultje@ronald.bitfreak.net>
- * Copyright (C) 2015 martin <<user@hostname.org>>
+ * Copyright (C) 2015 Martin Petrov Vachovski <<user@hostname.org>>
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -47,22 +47,20 @@
 #define __GST_DWTFILTER_H__
 
 #include <gst/gst.h>
-#include <gsl/gsl_sort.h>
-#include <gsl/gsl_wavelet.h>
 
 G_BEGIN_DECLS
 
 /* #defines don't like whitespacey bits */
 #define GST_TYPE_DWTFILTER \
-		(gst_dwt_filter_get_type())
+  (gst_dwt_filter_get_type())
 #define GST_DWTFILTER(obj) \
-		(G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DWTFILTER,GstDwtFilter))
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DWTFILTER,GstDwtFilter))
 #define GST_DWTFILTER_CLASS(klass) \
-		(G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DWTFILTER,GstDwtFilterClass))
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DWTFILTER,GstDwtFilterClass))
 #define GST_IS_DWTFILTER(obj) \
-		(G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DWTFILTER))
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DWTFILTER))
 #define GST_IS_DWTFILTER_CLASS(klass) \
-		(G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DWTFILTER))
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DWTFILTER))
 
 typedef struct _GstDwtFilter      GstDwtFilter;
 typedef struct _GstDwtFilterClass GstDwtFilterClass;
@@ -73,15 +71,18 @@ struct _GstDwtFilter
 
 	GstPad *sinkpad, *srcpad;
 
-	gboolean silent;
-
 	gsl_wavelet *w;
 	gsl_wavelet_workspace *work;
+	int width, height;
+	double *pDWTBuffer;
+	GstClock *pClock;
+
+	gboolean silent;
 };
 
 struct _GstDwtFilterClass 
 {
-	GstElementClass parent_class;
+  GstElementClass parent_class;
 };
 
 GType gst_dwt_filter_get_type (void);
