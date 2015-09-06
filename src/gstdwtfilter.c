@@ -118,6 +118,8 @@ static gboolean gst_dwt_filter_query (GstPad *pad, GstObject *parent, GstQuery *
 static void guint8_to_gdouble(guint8* src, gdouble *dst, gsize sz);
 static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz);
 
+static gboolean apply_wavelet_change(GstDwtFilter *filter, gchar *wavelet_name);
+
 /* GObject vmethod implementations */
 
 /* initialize the dwtfilter's class */
@@ -180,10 +182,9 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 
 	filter->silent = FALSE;
 
-	filter->wavelet_prop.type = GST_DWTFILTER_HAAR;
-	filter->wavelet_prop.order = 2;
+	filter->wavelet_name = "h2";
 
-	filter->w = gsl_wavelet_alloc (gsl_wavelet_daubechies_centered, 4);
+	filter->w = gsl_wavelet_alloc (gsl_wavelet_haar, 2);
 
 	gst_pad_set_query_function (filter->srcpad, gst_dwt_filter_query);
 
@@ -200,7 +201,9 @@ gst_dwt_filter_set_property (GObject * object, guint prop_id,
 		filter->silent = g_value_get_boolean (value);
 		break;
 	case PROP_WAVELET:
-//		filter->wavelet_prop g_value_get_string (value);
+		filter->wavelet_name = g_value_get_string (value);
+		apply_wavelet_change(filter, filter->wavelet_name);
+
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -219,7 +222,7 @@ gst_dwt_filter_get_property (GObject * object, guint prop_id,
 		g_value_set_boolean (value, filter->silent);
 		break;
 	case PROP_WAVELET:
-		g_value_set_string (value, "h2");
+		g_value_set_string (value, filter->wavelet_name);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -489,6 +492,54 @@ static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz)
 	{
 		dst[i] = src[i];
 	}
+}
+
+static gboolean apply_wavelet_change(GstDwtFilter *filter, gchar *wavelet_name)
+{
+	guint order;
+	if(wavelet_name[1] == 'c' || wavelet_name[1] == 'C')
+	{
+		order = atoi(wavelet_name + 2);
+		switch(wavelet_name[0])
+		{
+		case 'h':
+		case 'H':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_haar_centered, order);
+			return filter->w != NULL;
+		case 'd':
+		case 'D':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_daubechies_centered, order);
+			return filter->w != NULL;
+		case 'b':
+		case 'B':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_bspline_centered, order);
+			return filter->w != NULL;
+		default:
+			return FALSE;
+		}
+	}
+	else
+	{
+		order = atoi(wavelet_name + 1);
+		switch(wavelet_name[0])
+		{
+		case 'h':
+		case 'H':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_haar, order);
+			return filter->w != NULL;
+		case 'd':
+		case 'D':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_daubechies, order);
+			return filter->w != NULL;
+		case 'b':
+		case 'B':
+			filter->w = gsl_wavelet_alloc(gsl_wavelet_bspline, order);
+			return filter->w != NULL;
+		default:
+			return FALSE;
+		}
+	}
+	return FALSE;
 }
 
 /* PACKAGE: this is usually set by autotools depending on some _INIT macro

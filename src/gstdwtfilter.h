@@ -65,19 +65,19 @@ G_BEGIN_DECLS
 typedef struct _GstDwtFilter      GstDwtFilter;
 typedef struct _GstDwtFilterClass GstDwtFilterClass;
 
-typedef enum {
-  GST_DWTFILTER_HAAR,
-  GST_DWTFILTER_HAAR_CENTERED,
-  GST_DWTFILTER_DAUBECHIES,
-  GST_DWTFILTER_DAUBECHIES_CENTERED,
-  GST_DWTFILTER_BSPLINE,
-  GST_DWTFILTER_BSPLINE_CENTERED,
-} GstDwtFilterWaveletType;
-
-typedef struct{
-	GstDwtFilterWaveletType type;
-	guint order;
-}GstDwtFilterWaveletProp;
+//typedef enum {
+//  GST_DWTFILTER_HAAR,
+//  GST_DWTFILTER_HAAR_CENTERED,
+//  GST_DWTFILTER_DAUBECHIES,
+//  GST_DWTFILTER_DAUBECHIES_CENTERED,
+//  GST_DWTFILTER_BSPLINE,
+//  GST_DWTFILTER_BSPLINE_CENTERED,
+//} GstDwtFilterWaveletType;
+//
+//typedef struct{
+//	GstDwtFilterWaveletType type;
+//	guint order;
+//}GstDwtFilterWaveletProp;
 
 struct _GstDwtFilter
 {
@@ -87,7 +87,7 @@ struct _GstDwtFilter
 
 	gsl_wavelet *w;
 	gsl_wavelet_workspace *work;
-	GstDwtFilterWaveletProp wavelet_prop;
+	gchar *wavelet_name;
 
 	int width, height;
 	double *pDWTBuffer;
