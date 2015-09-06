@@ -81,7 +81,8 @@ enum
 enum
 {
 	PROP_0,
-	PROP_SILENT
+	PROP_SILENT,
+	PROP_WAVELET
 };
 
 /* the capabilities of the inputs and outputs.
@@ -91,13 +92,13 @@ enum
 static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
 		GST_PAD_SINK,
 		GST_PAD_ALWAYS,
-		GST_STATIC_CAPS ("ANY")
+		GST_STATIC_CAPS ("video/x-raw,format=GRAY8")
 );
 
 static GstStaticPadTemplate src_factory = GST_STATIC_PAD_TEMPLATE ("src",
 		GST_PAD_SRC,
 		GST_PAD_ALWAYS,
-		GST_STATIC_CAPS ("ANY")
+		GST_STATIC_CAPS ("video/x-raw,format=GRAY8")
 );
 
 #define gst_dwt_filter_parent_class parent_class
@@ -113,8 +114,6 @@ static gboolean gst_dwt_filter_src_event (GstPad * pad, GstObject * parent, GstE
 
 static GstFlowReturn gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf);
 static gboolean gst_dwt_filter_query (GstPad *pad, GstObject *parent, GstQuery *query);
-
-static gboolean my_bus_callback (GstBus *bus, GstMessage *message, gpointer data);
 
 static void guint8_to_gdouble(guint8* src, gdouble *dst, gsize sz);
 static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz);
@@ -138,10 +137,16 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 			g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
 					FALSE, G_PARAM_READWRITE));
 
+	g_object_class_install_property (gobject_class, PROP_WAVELET,
+			g_param_spec_string("wavelet", "Wavelet", "Family and order of the wavelet",
+					"h2", G_PARAM_READWRITE));
+
 	gst_element_class_set_details_simple(gstelement_class,
 			"DwtFilter",
-			"FIXME:Generic",
-			"FIXME:Generic Template Element",
+			"DWT Element",
+			"The element performs a GSL-based DW transform to the input square image."
+			"The element can act as low-pass or high-pass filter by removing the slower "
+			"or faster spacial modes from the image. The image is then transformed back.",
 			"Martin Petrov Vachovski <<user@hostname.org>>");
 
 	gst_element_class_add_pad_template (gstelement_class,
@@ -175,12 +180,12 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 
 	filter->silent = FALSE;
 
-	filter->pClock = gst_system_clock_obtain();
+	filter->wavelet_prop.type = GST_DWTFILTER_HAAR;
+	filter->wavelet_prop.order = 2;
 
 	filter->w = gsl_wavelet_alloc (gsl_wavelet_daubechies_centered, 4);
 
 	gst_pad_set_query_function (filter->srcpad, gst_dwt_filter_query);
-//	gst_pad_set_query_function (filter->sinkpad, gst_dwt_filter_query);
 
 }
 
@@ -193,6 +198,9 @@ gst_dwt_filter_set_property (GObject * object, guint prop_id,
 	switch (prop_id) {
 	case PROP_SILENT:
 		filter->silent = g_value_get_boolean (value);
+		break;
+	case PROP_WAVELET:
+//		filter->wavelet_prop g_value_get_string (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -209,6 +217,9 @@ gst_dwt_filter_get_property (GObject * object, guint prop_id,
 	switch (prop_id) {
 	case PROP_SILENT:
 		g_value_set_boolean (value, filter->silent);
+		break;
+	case PROP_WAVELET:
+		g_value_set_string (value, "h2");
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -273,9 +284,6 @@ gst_dwt_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 		GstClockTime timestamp;
 
 		gst_event_parse_qos (event, &type, &proportion, &diff, &timestamp);
-//		g_print("type=%d (GST_QOS_TYPE_UNDERFLOW=%d) proportion=%lf timestamp=%ld diff=%ld\n",
-//			type, GST_QOS_TYPE_UNDERFLOW, proportion, timestamp, diff);
-
 
 		ret = gst_pad_event_default (pad, parent, event);
 		break;
@@ -328,45 +336,49 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
 	GstDwtFilter *filter;
 	GstMapInfo info;
-	int res, i;
+	int i, j;
 	struct timespec t1, t2, diff;
 
 	filter = GST_DWTFILTER (parent);
-
-//	if (filter->silent == FALSE)
-//		g_print ("I'm plugged, therefore I'm in.\n");
-
-//	data_timestamp = GST_BUFFER_TIMESTAMP (buf);
-
 
 	gst_buffer_map (buf, &info, GST_MAP_WRITE);
 	guint8_to_gdouble(info.data, filter->pDWTBuffer, filter->height * filter->width);
 
 	clock_gettime(CLOCK_REALTIME, &t1);
-	for(i = 0; i < filter->height; i++)
+//	for(i = 0; i < filter->height; i++)
+//	{
+//		double *data = filter->pDWTBuffer + filter->height * i;
+////		g_print ("Calling gsl_wavelet_transform_forward()...\n");
+//		res = gsl_wavelet_transform_forward(filter->w, data, 1, filter->width, filter->work);
+//
+//		memset(data, 0, filter->width * sizeof(gdouble) / 2);
+//
+//		res = gsl_wavelet_transform_inverse(filter->w, data, 1, filter->width, filter->work);
+//	}
+
+	gsl_wavelet2d_transform_forward(filter->w,
+									filter->pDWTBuffer,
+									filter->width,
+									filter->width,
+									filter->height,
+									filter->work);
+
+	for(j = 0; j < filter->height / 2; j++)
 	{
-		double *data = filter->pDWTBuffer + filter->height * i;
-//		g_print ("Calling gsl_wavelet_transform_forward()...\n");
-		res = gsl_wavelet_transform_forward(filter->w, data, 1, filter->width, filter->work);
-
-		memset(data, 0, filter->width * sizeof(gdouble) / 2);
-
-		res = gsl_wavelet_transform_inverse(filter->w, data, 1, filter->width, filter->work);
+		memset(filter->pDWTBuffer + j * filter->width, 0, sizeof(gdouble) * (filter->width / 2));
 	}
 
-//	res = gsl_wavelet2d_transform_forward(	filter->w,
-//											filter->pDWTBuffer,
-//											filter->width,
-//											filter->width,
-//											filter->height,
-//											filter->work);
+	gsl_wavelet2d_transform_inverse(filter->w,
+									filter->pDWTBuffer,
+									filter->width,
+									filter->width,
+									filter->height,
+									filter->work);
 
 	clock_gettime(CLOCK_REALTIME, &t2);
 
 	gdouble_to_guint8(filter->pDWTBuffer, info.data, filter->height * filter->width);
 	gst_buffer_unmap (buf, &info);
-
-
 
 	if(t2.tv_nsec >= t1.tv_nsec)
 	{
@@ -382,7 +394,6 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
 //	g_print ("diff=%ld.%09ld\n", diff.tv_sec, diff.tv_nsec);
 
-	/* just push out the incoming buffer without touching it */
 	return gst_pad_push (filter->srcpad, buf);
 }
 
