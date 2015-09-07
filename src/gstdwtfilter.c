@@ -221,6 +221,7 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 
 	filter->silent = FALSE;
 	filter->inverse = TRUE;
+	filter->cutoff = 1;
 
 	filter->band = GST_DWTFILTER_LOWPASS;
 	filter->wavelet_name = "h2";
