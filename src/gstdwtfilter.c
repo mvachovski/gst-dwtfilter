@@ -82,7 +82,10 @@ enum
 {
 	PROP_0,
 	PROP_SILENT,
-	PROP_WAVELET
+	PROP_WAVELET,
+	PROP_BAND,
+	PROP_INVERSE,
+	PROP_CUTOFF
 };
 
 /* the capabilities of the inputs and outputs.
@@ -122,6 +125,26 @@ static gboolean apply_wavelet_change(GstDwtFilter *filter, gchar *wavelet_name);
 
 /* GObject vmethod implementations */
 
+
+#define GST_TYPE_DWTFILTER_BAND (gst_dwtfilter_band_get_type ())
+
+static GType gst_dwtfilter_band_get_type (void)
+{
+	static GType dwtfilter_band_type = 0;
+
+	if (!dwtfilter_band_type) {
+		static GEnumValue bands[] = {
+				{ GST_DWTFILTER_LOWPASS, "Low-pass filter",    "low" },
+				{ GST_DWTFILTER_HIGHPASS,  "High-pass filter", "high"  },
+				{ 0, NULL, NULL },
+		};
+
+		dwtfilter_band_type = g_enum_register_static ("GstDwtFilterBand", bands);
+	}
+
+	return dwtfilter_band_type;
+}
+
 /* initialize the dwtfilter's class */
 static void
 gst_dwt_filter_class_init (GstDwtFilterClass * klass)
@@ -142,6 +165,22 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 	g_object_class_install_property (gobject_class, PROP_WAVELET,
 			g_param_spec_string("wavelet", "Wavelet", "Family and order of the wavelet",
 					"h2", G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_BAND,
+	    g_param_spec_enum ("band", "Band",
+	    			"Determines whether the filter is low-pass or high-pass",
+			       GST_TYPE_DWTFILTER_BAND, GST_DWTFILTER_LOWPASS,
+			       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property (gobject_class, PROP_INVERSE,
+			g_param_spec_boolean ("inverse", "Inverse", "Whether or not to perform invers DWT after the filter has been applyed",
+					TRUE, G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_CUTOFF,
+				g_param_spec_uint ("cutoff", "Cutoff", "The cutoff of the filter- defined as an entry number. "
+						"Shoud not be bigger than the image size.",
+						1, 8096, 1, G_PARAM_READWRITE));
+
 
 	gst_element_class_set_details_simple(gstelement_class,
 			"DwtFilter",
@@ -181,7 +220,9 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 		GST_DEBUG_FUNCPTR(gst_dwt_filter_src_event));
 
 	filter->silent = FALSE;
+	filter->inverse = TRUE;
 
+	filter->band = GST_DWTFILTER_LOWPASS;
 	filter->wavelet_name = "h2";
 
 	filter->w = gsl_wavelet_alloc (gsl_wavelet_haar, 2);
@@ -203,7 +244,15 @@ gst_dwt_filter_set_property (GObject * object, guint prop_id,
 	case PROP_WAVELET:
 		filter->wavelet_name = g_value_get_string (value);
 		apply_wavelet_change(filter, filter->wavelet_name);
-
+		break;
+	case PROP_BAND:
+		filter->band = g_value_get_enum(value);
+		break;
+	case PROP_INVERSE:
+		filter->inverse = g_value_get_boolean (value);
+		break;
+	case PROP_CUTOFF:
+		filter->cutoff = g_value_get_uint (value);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -223,6 +272,15 @@ gst_dwt_filter_get_property (GObject * object, guint prop_id,
 		break;
 	case PROP_WAVELET:
 		g_value_set_string (value, filter->wavelet_name);
+		break;
+	case PROP_BAND:
+		g_value_set_enum(value, filter->band);
+		break;
+	case PROP_INVERSE:
+		g_value_set_enum(value, filter->inverse);
+		break;
+	case PROP_CUTOFF:
+		g_value_set_uint(value, filter->cutoff);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -366,17 +424,35 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 									filter->height,
 									filter->work);
 
-	for(j = 0; j < filter->height / 2; j++)
+	if(filter->band == GST_DWTFILTER_HIGHPASS)
 	{
-		memset(filter->pDWTBuffer + j * filter->width, 0, sizeof(gdouble) * (filter->width / 2));
+		for(j = 0; j < filter->cutoff; j++)
+		{
+			memset(filter->pDWTBuffer + j * filter->width, 0, sizeof(gdouble) * filter->cutoff);
+		}
+	}
+	else
+	{
+		for(j = 0; j < filter->cutoff; j++)
+		{
+			memset(filter->pDWTBuffer + j * filter->width + filter->cutoff, 0,
+				sizeof(gdouble) * (filter->width - filter->cutoff));
+		}
+		for(; j < filter->height; j++)
+		{
+			memset(filter->pDWTBuffer + j * filter->width, 0, sizeof(gdouble) * filter->width);
+		}
 	}
 
-	gsl_wavelet2d_transform_inverse(filter->w,
-									filter->pDWTBuffer,
-									filter->width,
-									filter->width,
-									filter->height,
-									filter->work);
+	if(filter->inverse == TRUE)
+	{
+		gsl_wavelet2d_transform_inverse(filter->w,
+										filter->pDWTBuffer,
+										filter->width,
+										filter->width,
+										filter->height,
+										filter->work);
+	}
 
 	clock_gettime(CLOCK_REALTIME, &t2);
 
