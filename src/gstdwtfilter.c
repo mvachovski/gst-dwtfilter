@@ -179,7 +179,7 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 	g_object_class_install_property (gobject_class, PROP_CUTOFF,
 				g_param_spec_uint ("cutoff", "Cutoff", "The cutoff of the filter- defined as an entry number. "
 						"Shoud not be bigger than the image size.",
-						1, 8096, 1, G_PARAM_READWRITE));
+						0, 8096, 1, G_PARAM_READWRITE));
 
 
 	gst_element_class_set_details_simple(gstelement_class,
