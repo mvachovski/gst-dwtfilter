@@ -84,6 +84,7 @@ struct _GstDwtFilter
 
 	int width, height;
 	double *pDWTBuffer;
+	double *pTmpBuffer;
 
 	gboolean silent;
 	gboolean inverse;

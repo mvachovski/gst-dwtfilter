@@ -82,7 +82,7 @@ DIST_COMMON = INSTALL NEWS README AUTHORS ChangeLog \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
 	$(top_srcdir)/configure $(am__configure_deps) \
 	$(srcdir)/config.h.in COPYING compile config.guess config.sub \
-	install-sh missing ltmain.sh
+	depcomp install-sh missing ltmain.sh
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -192,13 +192,13 @@ distuninstallcheck_listfiles = find . -type f -print
 am__distuninstallcheck_listfiles = $(distuninstallcheck_listfiles) \
   | sed 's|^\./|$(prefix)/|' | grep -v '$(infodir)/dir$$'
 distcleancheck_listfiles = find . -type f -print
-ACLOCAL = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/missing aclocal-1.14
+ACLOCAL = ${SHELL} /home/martin/workspace/gst-dwtfilter/missing aclocal-1.14
 AMTAR = $${TAR-tar}
 AM_DEFAULT_VERBOSITY = 1
 AR = ar
-AUTOCONF = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/missing autoconf
-AUTOHEADER = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/missing autoheader
-AUTOMAKE = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/missing automake-1.14
+AUTOCONF = ${SHELL} /home/martin/workspace/gst-dwtfilter/missing autoconf
+AUTOHEADER = ${SHELL} /home/martin/workspace/gst-dwtfilter/missing autoheader
+AUTOMAKE = ${SHELL} /home/martin/workspace/gst-dwtfilter/missing automake-1.14
 AWK = mawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
@@ -219,7 +219,7 @@ EXEEXT =
 FGREP = /bin/grep -F
 GREP = /bin/grep
 GST_CFLAGS = -pthread -I/usr/include/gstreamer-1.0 -I/usr/include/glib-2.0 -I/usr/lib/x86_64-linux-gnu/glib-2.0/include  -Wall
-GST_LIBS = -lgstbase-1.0 -lgstcontroller-1.0 -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0
+GST_LIBS = -lgstbase-1.0 -lgstcontroller-1.0 -lgstreamer-1.0 -lgobject-2.0 -lglib-2.0 
 GST_PLUGIN_LDFLAGS = -module -avoid-version -export-symbols-regex _*\(gst_\|Gst\|GST_\).*
 HAVE_PKGCONFIG =  
 INSTALL = /usr/bin/install -c
@@ -230,13 +230,13 @@ INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LD = /usr/bin/ld -m elf_x86_64
 LDFLAGS = 
 LIBOBJS = 
-LIBS = -lgsl -lgslcblas -lm
+LIBS = 
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LN_S = ln -s
 LTLIBOBJS = 
 MAINT = 
-MAKEINFO = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/missing makeinfo
+MAKEINFO = ${SHELL} /home/martin/workspace/gst-dwtfilter/missing makeinfo
 MANIFEST_TOOL = :
 MKDIR_P = /bin/mkdir -p
 NM = /usr/bin/nm -B
@@ -262,10 +262,10 @@ SET_MAKE =
 SHELL = /bin/bash
 STRIP = strip
 VERSION = 1.0.0
-abs_builddir = /home/martin/workspace/gst-template/gst-dwt
-abs_srcdir = /home/martin/workspace/gst-template/gst-dwt
-abs_top_builddir = /home/martin/workspace/gst-template/gst-dwt
-abs_top_srcdir = /home/martin/workspace/gst-template/gst-dwt
+abs_builddir = /home/martin/workspace/gst-dwtfilter
+abs_srcdir = /home/martin/workspace/gst-dwtfilter
+abs_top_builddir = /home/martin/workspace/gst-dwtfilter
+abs_top_srcdir = /home/martin/workspace/gst-dwtfilter
 ac_ct_AR = ar
 ac_ct_CC = gcc
 ac_ct_DUMPBIN = 
@@ -294,7 +294,7 @@ host_vendor = unknown
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
-install_sh = ${SHELL} /home/martin/workspace/gst-template/gst-dwt/install-sh
+install_sh = ${SHELL} /home/martin/workspace/gst-dwtfilter/install-sh
 libdir = ${exec_prefix}/lib
 libexecdir = ${exec_prefix}/libexec
 localedir = ${datarootdir}/locale
