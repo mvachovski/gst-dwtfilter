@@ -181,7 +181,7 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 					TRUE, G_PARAM_READWRITE));
 
 	g_object_class_install_property (gobject_class, PROP_CUTOFF,
-				g_param_spec_uint ("cutoff", "Cutoff", "The cutoff of the filter- defined as an entry number. "
+				g_param_spec_uint ("cutoff", "Cutoff", "The cutoff of the filter- defined as an integer number. "
 						"Shoud not be bigger than the image size.",
 						0, 8096, 1, G_PARAM_READWRITE));
 
@@ -472,6 +472,9 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 //		}
 //	}
 
+	
+	memset(filter->pDWTBuffer, 0, filter->width * filter->height * sizeof(double));
+	
 	higher_detail_window.x = higher_detail_window.y = 200;
 	higher_detail_window.width = higher_detail_window.height = 64;
 
@@ -711,10 +714,10 @@ static void copy_higher_details2(gdouble* dest, gdouble* src,
 	guint block_height_scaled;
 	int i, j;
 
-//	g_print ("copy_higher_details x=%u y=%u w=%u h=%u\n", x, y, width, height);
+	g_print ("copy_higher_details x=%u y=%u w=%u h=%u\n", x, y, width, height);
 
 //	for(scale = 64; scale <= 64; scale *= 2)
-	for(scale = height / 8; scale <= height / 2; scale *= 2)
+	for(scale = height / 2; scale <= height / 2; scale *= 2)
 	{
 		x_scaled = 1.* x * scale / width;
 		y_scaled = 1.* y * scale / height;
@@ -742,8 +745,8 @@ static void copy_higher_details2(gdouble* dest, gdouble* src,
 			{
 				dest[(i + x_scaled + scale) + (j + y_scaled) * width] =
 					src[(i + x_scaled + scale) + (j + y_scaled) * width];
-				dest[(i + x_scaled) + (j + y_scaled + scale) * width] =
-					src[(i + x_scaled) + (j + y_scaled + scale) * width];
+//				dest[(i + x_scaled) + (j + y_scaled + scale) * width] =
+//					src[(i + x_scaled) + (j + y_scaled + scale) * width];
 				dest[(i + x_scaled + scale) + (j + y_scaled + scale) * width] =
 					src[(i + x_scaled + scale) + (j + y_scaled + scale) * width];
 			}
