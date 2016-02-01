@@ -123,8 +123,7 @@ static void gdouble_to_guint8(gdouble* src, guint8 *dst, gsize sz);
 
 static gboolean apply_wavelet_change(GstDwtFilter *filter, gchar *wavelet_name);
 
-static void copy_higher_details(gdouble* dest, gdouble* src, guint width, guint height, uint x, uint y);
-static void copy_higher_details2(gdouble* dest, gdouble* src,
+static void copy_higher_details(gdouble* dest, gdouble* src,
 	guint width, guint height, guint x, guint y, guint block_width, guint block_height);
 
 /* GObject vmethod implementations */
@@ -223,6 +222,7 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 	gst_pad_set_event_function (filter->srcpad,
 		GST_DEBUG_FUNCPTR(gst_dwt_filter_src_event));
 
+	filter->phof = TRUE;
 	filter->silent = FALSE;
 	filter->inverse = TRUE;
 	filter->cutoff = 1;
@@ -328,6 +328,8 @@ gst_dwt_filter_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 				//memset(pAccum, 0, 4 * width * height * sizeof(long int));
 				filter->pDWTBuffer = (double*) malloc(filter->width * filter->height * sizeof(double));
 				filter->pTmpBuffer = (double*) malloc(filter->width * filter->height * sizeof(double));
+				filter->pTmpBuffer2 = (double*) malloc(filter->width * filter->height * sizeof(double));
+
 				memset(filter->pDWTBuffer, 0, filter->width * filter->height * sizeof(double));
 
 				filter->work = gsl_wavelet_workspace_alloc (filter->width);
@@ -373,18 +375,6 @@ gst_dwt_filter_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
 	switch (GST_EVENT_TYPE (event))
 	{
 	case GST_EVENT_QOS:
-//		g_print("GST_EVENT_QOS\n");
-
-//		GstQOSType type;
-//		gdouble proportion;
-//		GstClockTimeDiff diff;
-//		GstClockTime timestamp;
-//
-//		gst_event_parse_qos (event, &type, &proportion, &diff, &timestamp);
-//		g_print("type=%d (GST_QOS_TYPE_UNDERFLOW=%d) proportion=%lf timestamp=%ld diff=%ld\n",
-//			type, GST_QOS_TYPE_UNDERFLOW, proportion, timestamp, diff);
-
-
 		ret = gst_pad_event_default (pad, parent, event);
 		break;
 	default:
@@ -418,16 +408,6 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	guint8_to_gdouble(info.data, filter->pDWTBuffer, filter->height * filter->width);
 
 	clock_gettime(CLOCK_REALTIME, &t1);
-//	for(i = 0; i < filter->height; i++)
-//	{
-//		double *data = filter->pDWTBuffer + filter->height * i;
-////		g_print ("Calling gsl_wavelet_transform_forward()...\n");
-//		res = gsl_wavelet_transform_forward(filter->w, data, 1, filter->width, filter->work);
-//
-//		memset(data, 0, filter->width * sizeof(gdouble) / 2);
-//
-//		res = gsl_wavelet_transform_inverse(filter->w, data, 1, filter->width, filter->work);
-//	}
 
 	gsl_wavelet2d_transform_forward(filter->w,
 									filter->pDWTBuffer,
@@ -458,35 +438,22 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 		}
 	}
 	
-//	guint v, w;
-//	for(v = 0; v < 25; v++)
-//	{
-//		for(w = 0; w < 25	; w++)
-//		{
-//			copy_higher_details(filter->pDWTBuffer,
-//						filter->pTmpBuffer,
-//						filter->width,
-//						filter->height,
-//						(filter->width / 1) - 1 - v,
-//						(filter->height / 1) - 1 - w);
-//		}
-//	}
+	if(filter->phof)
+	{
+		memcpy(filter->pTmpBuffer2, filter->pDWTBuffer, filter->width * filter->height * sizeof(double));
 
-	
-	memset(filter->pDWTBuffer, 0, filter->width * filter->height * sizeof(double));
-	
-	higher_detail_window.x = higher_detail_window.y = 200;
-	higher_detail_window.width = higher_detail_window.height = 64;
+		higher_detail_window.x = higher_detail_window.y = 100;
+		higher_detail_window.width = higher_detail_window.height = filter->width / 2;
 
-	copy_higher_details2(filter->pDWTBuffer,
-			filter->pTmpBuffer,
-			filter->width,
-			filter->height,
-			higher_detail_window.x,
-			higher_detail_window.y,
-			higher_detail_window.width,
-			higher_detail_window.height);
-
+		copy_higher_details(filter->pTmpBuffer2,
+				filter->pTmpBuffer,
+				filter->width,
+				filter->height,
+				higher_detail_window.x,
+				higher_detail_window.y,
+				higher_detail_window.width,
+				higher_detail_window.height);
+	}
 
 	if(filter->inverse == TRUE)
 	{
@@ -497,8 +464,28 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 										filter->height,
 										filter->work);
 
+		if(filter->phof)
+		{
+			gsl_wavelet2d_transform_inverse(filter->w,
+											filter->pTmpBuffer2,
+											filter->width,
+											filter->width,
+											filter->height,
+											filter->work);
 
-
+			for(i = higher_detail_window.x; i < higher_detail_window.x + higher_detail_window.width; i++)
+			{
+				for(j = higher_detail_window.y; j < higher_detail_window.y + higher_detail_window.height; j++)
+				{
+					int ix = i + j * filter->width;
+					filter->pDWTBuffer[ix] = filter->pTmpBuffer2[ix];
+				}
+			}
+		}
+	}
+	else
+	{
+		memcpy(filter->pDWTBuffer, filter->pTmpBuffer2, filter->width * filter->height * sizeof(double));
 	}
 
 	clock_gettime(CLOCK_REALTIME, &t2);
@@ -677,34 +664,6 @@ static gboolean apply_wavelet_change(GstDwtFilter *filter, gchar *wavelet_name)
 }
 
 static void copy_higher_details(gdouble* dest, gdouble* src,
-	guint width, guint height, uint x, uint y)
-{
-	guint scale;
-	
-	g_print ("copy_higher_details x=%u y=%u w=%u h=%u\n", x, y, width, height);
-	
-	for(scale = 4; scale <= height / 2; scale *= 2)
-	{
-		guint x_scaled = 1.* x * scale / width;
-		guint y_scaled = 1.* y * scale / width;
-		g_print ("copy_higher_details scale=%u x_scaled=%u y_scaled=%u\n", scale, x_scaled, y_scaled);
-		g_print ("src[addr1]=%lf addr1=%u\n", 
-				src[(x_scaled + scale) + y_scaled * width],
-				(x_scaled + scale) + y_scaled * width);
-		g_print ("src[addr2]=%lf addr2=%u\n",
-				src[x_scaled + (y_scaled + scale) * width],
-				x_scaled + (y_scaled + scale) * width);
-		g_print ("src[addr3]=%lf addr3=%u\n",
-				src[(x_scaled + scale) + (y_scaled + scale) * width],
-				(x_scaled + scale) + (y_scaled + scale) * width);
-		
-		dest[(x_scaled + scale) + y_scaled * width] = src[(x_scaled + scale) + y_scaled * width];
-		dest[x_scaled + (y_scaled + scale) * width] = src[x_scaled + (y_scaled + scale) * width];
-		dest[(x_scaled + scale) + (y_scaled + scale) * width] = src[(x_scaled + scale) + (y_scaled + scale) * width];
-	}
-}
-
-static void copy_higher_details2(gdouble* dest, gdouble* src,
 	guint width, guint height, guint x, guint y, guint block_width, guint block_height)
 {
 	guint scale;
@@ -714,37 +673,41 @@ static void copy_higher_details2(gdouble* dest, gdouble* src,
 	guint block_height_scaled;
 	int i, j;
 
-	g_print ("copy_higher_details x=%u y=%u w=%u h=%u\n", x, y, width, height);
+//	g_print ("copy_higher_details x=%u y=%u w=%u h=%u\n", x, y, width, height);
 
 //	for(scale = 64; scale <= 64; scale *= 2)
-	for(scale = height / 2; scale <= height / 2; scale *= 2)
+//	for(scale = 16; scale <= 128; scale *= 2)
+	for(scale = 8; scale <= height / 2; scale *= 2)
 	{
 		x_scaled = 1.* x * scale / width;
 		y_scaled = 1.* y * scale / height;
 		block_width_scaled  = 1. * block_width * scale / width;
 		block_height_scaled  = 1. * block_height * scale / height;
-//		g_print ("copy_higher_details scale=%u x_scaled=%u y_scaled=%u\n", scale, x_scaled, y_scaled);
-//		g_print ("src[addr1]=%lf addr1=%u\n",
-//				src[(x_scaled + scale) + y_scaled * width],
-//				(x_scaled + scale) + y_scaled * width);
-//		g_print ("src[addr2]=%lf addr2=%u\n",
-//				src[x_scaled + (y_scaled + scale) * width],
-//				x_scaled + (y_scaled + scale) * width);
-//		g_print ("src[addr3]=%lf addr3=%u\n",
-//				src[(x_scaled + scale) + (y_scaled + scale) * width],
-//				(x_scaled + scale) + (y_scaled + scale) * width);
 
-		g_print ("scale=%u x=%u y=%u x_scaled=%u y_scaled=%u block_width=%u block_height=%u "
-			"block_width_scaled=%u block_height_scaled=%u\n",
-			scale, x, y, x_scaled, y_scaled, block_width, block_height, block_width_scaled,
-			block_height_scaled);
+		for(i = 0; i < scale; i++)
+		{
+			for(j = 0; j < block_width_scaled; j++)
+			{
+				dest[(i) + (j + y_scaled + scale) * width] =
+					src[(i) + (j + y_scaled + scale) * width];
+			}
+		}
+
+		for(i = 0; i < block_width_scaled; i++)
+		{
+			for(j = 0; j < scale; j++)
+			{
+				dest[(i + x_scaled + scale) + (j) * width] =
+					src[(i + x_scaled + scale) + (j) * width];
+			}
+		}
 
 		for(i = 0; i < block_width_scaled; i++)
 		{
 			for(j = 0; j < block_width_scaled; j++)
 			{
-				dest[(i + x_scaled + scale) + (j + y_scaled) * width] =
-					src[(i + x_scaled + scale) + (j + y_scaled) * width];
+//				dest[(i + x_scaled + scale) + (j + y_scaled) * width] =
+//					src[(i + x_scaled + scale) + (j + y_scaled) * width];
 //				dest[(i + x_scaled) + (j + y_scaled + scale) * width] =
 //					src[(i + x_scaled) + (j + y_scaled + scale) * width];
 				dest[(i + x_scaled + scale) + (j + y_scaled + scale) * width] =
