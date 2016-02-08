@@ -85,7 +85,12 @@ enum
 	PROP_WAVELET,
 	PROP_BAND,
 	PROP_INVERSE,
-	PROP_CUTOFF
+	PROP_CUTOFF,
+	PROP_PHOF,
+	PROP_PHOF_X,
+	PROP_PHOF_Y,
+	PROP_PHOF_W,
+	PROP_PHOF_H,
 };
 
 /* the capabilities of the inputs and outputs.
@@ -184,6 +189,34 @@ gst_dwt_filter_class_init (GstDwtFilterClass * klass)
 						"Shoud not be bigger than the image size.",
 						0, 8096, 1, G_PARAM_READWRITE));
 
+	g_object_class_install_property (gobject_class, PROP_PHOF,
+			g_param_spec_boolean ("phof", "Phof",
+					"Preserve higher order features in a specific rectangular window",
+					TRUE, G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_PHOF_X,
+			g_param_spec_uint ("phofx", "PhofX",
+					"The left border of the rectangle with enabled phof."
+					"Shoud not be bigger than the image size.",
+					0, 8096, 1, G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_PHOF_Y,
+			g_param_spec_uint ("phofy", "PhofY",
+					"The upper border of the rectangle with enabled phof."
+					"Shoud not be bigger than the image size.",
+					0, 8096, 1, G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_PHOF_W,
+			g_param_spec_uint ("phofw", "PhofW",
+					"The width of the rectangle with enabled phof."
+					"Shoud not be bigger than the image size.",
+					0, 8096, 1, G_PARAM_READWRITE));
+
+	g_object_class_install_property (gobject_class, PROP_PHOF_H,
+			g_param_spec_uint ("phofh", "PhofH",
+					"The height of the rectangle with enabled phof."
+					"Shoud not be bigger than the image size.",
+					0, 8096, 1, G_PARAM_READWRITE));
 
 	gst_element_class_set_details_simple(gstelement_class,
 			"DwtFilter",
@@ -222,13 +255,18 @@ gst_dwt_filter_init (GstDwtFilter * filter)
 	gst_pad_set_event_function (filter->srcpad,
 		GST_DEBUG_FUNCPTR(gst_dwt_filter_src_event));
 
-	filter->phof = TRUE;
+	filter->phof = FALSE;
 	filter->silent = FALSE;
 	filter->inverse = TRUE;
 	filter->cutoff = 1;
 
 	filter->band = GST_DWTFILTER_LOWPASS;
 	filter->wavelet_name = "h2";
+
+	filter->phof_window.x = 0;
+	filter->phof_window.y = 0;
+	filter->phof_window.w = 0;
+	filter->phof_window.h = 0;
 
 	filter->w = gsl_wavelet_alloc (gsl_wavelet_haar, 2);
 
@@ -259,6 +297,21 @@ gst_dwt_filter_set_property (GObject * object, guint prop_id,
 	case PROP_CUTOFF:
 		filter->cutoff = g_value_get_uint (value);
 		break;
+	case PROP_PHOF:
+		filter->phof = g_value_get_boolean (value);
+		break;
+	case PROP_PHOF_X:
+		filter->phof_window.x = g_value_get_uint (value);
+		break;
+	case PROP_PHOF_Y:
+		filter->phof_window.y = g_value_get_uint (value);
+		break;
+	case PROP_PHOF_W:
+		filter->phof_window.w = g_value_get_uint (value);
+		break;
+	case PROP_PHOF_H:
+		filter->phof_window.h = g_value_get_uint (value);
+		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -286,6 +339,21 @@ gst_dwt_filter_get_property (GObject * object, guint prop_id,
 		break;
 	case PROP_CUTOFF:
 		g_value_set_uint(value, filter->cutoff);
+		break;
+	case PROP_PHOF:
+		g_value_set_boolean (value, filter->phof);
+		break;
+	case PROP_PHOF_X:
+		g_value_set_uint (value, filter->phof_window.x);
+		break;
+	case PROP_PHOF_Y:
+		g_value_set_uint (value, filter->phof_window.y);
+		break;
+	case PROP_PHOF_W:
+		g_value_set_uint (value, filter->phof_window.w);
+		break;
+	case PROP_PHOF_H:
+		g_value_set_uint (value, filter->phof_window.h);
 		break;
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -397,11 +465,6 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	int i, j;
 	struct timespec t1, t2, diff;
 
-	struct
-	{
-		guint x, y, width, height;
-	}higher_detail_window;
-
 	filter = GST_DWTFILTER (parent);
 
 	gst_buffer_map (buf, &info, GST_MAP_WRITE);
@@ -442,21 +505,32 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	{
 		memcpy(filter->pTmpBuffer2, filter->pDWTBuffer, filter->width * filter->height * sizeof(double));
 
-		higher_detail_window.x = higher_detail_window.y = 100;
-		higher_detail_window.width = higher_detail_window.height = filter->width / 2;
+//		higher_detail_window.x = higher_detail_window.y = 100;
+//		higher_detail_window.width = higher_detail_window.height = 100;
 
 		copy_higher_details(filter->pTmpBuffer2,
 				filter->pTmpBuffer,
 				filter->width,
 				filter->height,
-				higher_detail_window.x,
-				higher_detail_window.y,
-				higher_detail_window.width,
-				higher_detail_window.height);
+				filter->phof_window.x,
+				filter->phof_window.y,
+				filter->phof_window.w,
+				filter->phof_window.h);
 	}
 
 	if(filter->inverse == TRUE)
 	{
+//		memset(filter->pDWTBuffer, 0, filter->width * filter->height * sizeof(double));
+//		filter->pDWTBuffer[0] = 23763.375000;
+////		filter->pDWTBuffer[1] = -215.941406;
+////		filter->pDWTBuffer[2 * filter->width + 0] = -2202.557521;
+//		filter->pDWTBuffer[filter->width] = 2489.681545;
+//		for(i = filter->width + 0; i <= filter->width + 0; i++)
+//		{
+//			g_print("filter->pDWTBuffer[%d] = %lf\n", i, filter->pDWTBuffer[i]);
+//		}
+//		g_print("filter->pDWTBuffer[1] = %lf\n", filter->pDWTBuffer[1]);
+
 		gsl_wavelet2d_transform_inverse(filter->w,
 										filter->pDWTBuffer,
 										filter->width,
@@ -473,9 +547,9 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 											filter->height,
 											filter->work);
 
-			for(i = higher_detail_window.x; i < higher_detail_window.x + higher_detail_window.width; i++)
+			for(i = filter->phof_window.x; i < filter->phof_window.x + filter->phof_window.w; i++)
 			{
-				for(j = higher_detail_window.y; j < higher_detail_window.y + higher_detail_window.height; j++)
+				for(j = filter->phof_window.y; j < filter->phof_window.y + filter->phof_window.h; j++)
 				{
 					int ix = i + j * filter->width;
 					filter->pDWTBuffer[ix] = filter->pTmpBuffer2[ix];
@@ -485,24 +559,30 @@ gst_dwt_filter_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 	}
 	else
 	{
-		memcpy(filter->pDWTBuffer, filter->pTmpBuffer2, filter->width * filter->height * sizeof(double));
+		if(filter->phof)
+		{
+			memcpy(filter->pDWTBuffer, filter->pTmpBuffer2, filter->width * filter->height * sizeof(double));
+		}
 	}
 
 	clock_gettime(CLOCK_REALTIME, &t2);
 
 	gdouble_to_guint8(filter->pDWTBuffer, info.data, filter->height * filter->width);
 
-	memset(info.data + higher_detail_window.x + higher_detail_window.y * filter->width,
-		255,
-		higher_detail_window.width);
-	memset(info.data + higher_detail_window.x + (higher_detail_window.y + higher_detail_window.width )* filter->width,
-		255,
-		higher_detail_window.width);
-
-	for(i = higher_detail_window.y; i < higher_detail_window.y + higher_detail_window.height; i++)
+	if(filter->phof)
 	{
-		info.data[higher_detail_window.x + i * filter->width] = 255;
-		info.data[higher_detail_window.x + higher_detail_window.width + i * filter->width] = 255;
+		memset(info.data + filter->phof_window.x + filter->phof_window.y * filter->width,
+				255,
+				filter->phof_window.w);
+		memset(info.data + filter->phof_window.x + (filter->phof_window.y + filter->phof_window.w )* filter->width,
+				255,
+				filter->phof_window.w);
+
+		for(i = filter->phof_window.y; i < filter->phof_window.y + filter->phof_window.h; i++)
+		{
+			info.data[filter->phof_window.x + i * filter->width] = 255;
+			info.data[filter->phof_window.x + filter->phof_window.w + i * filter->width] = 255;
+		}
 	}
 
 	gst_buffer_unmap (buf, &info);
@@ -677,7 +757,7 @@ static void copy_higher_details(gdouble* dest, gdouble* src,
 
 //	for(scale = 64; scale <= 64; scale *= 2)
 //	for(scale = 16; scale <= 128; scale *= 2)
-	for(scale = 8; scale <= height / 2; scale *= 2)
+	for(scale = 2; scale <= height / 2; scale *= 2)
 	{
 		x_scaled = 1.* x * scale / width;
 		y_scaled = 1.* y * scale / height;

@@ -90,6 +90,11 @@ struct _GstDwtFilter
 	gboolean silent;
 	gboolean inverse;
 	gboolean phof;
+
+	struct
+	{
+		guint x, y, w, h;
+	}phof_window;
 };
 
 struct _GstDwtFilterClass 
